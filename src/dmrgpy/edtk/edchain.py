@@ -25,25 +25,30 @@ class EDchain():
     def gs_energy(self):
         """Return ground state energy"""
         return self.get_excited(n=1)[0]
-    def get_gs(self,array_mode=True):
+    def get_gs(self,array_mode=True,**kwargs):
         """Get the ground state"""
 #        if array_mode: 
 #            print("This will be deprecated")
 #            return self.get_gs_array()
 #        else: 
-        return State(self.get_gs_array(),self)
-    def get_gs_array(self):
+        
+        wf, e = self.get_gs_array(**kwargs)
+        return State(v=wf,MBO=self,e=e)
+    def get_gs_array(self, **kwargs):
         """Get ground state wavefunction"""
         if self.computed_gs: return self.wf0
         else: 
 #          e0,wf0 = algebra.ground_state(self.get_hamiltonian())
-          (es,ws) = algebra.lowest_states(self.get_hamiltonian(),n=3)
+          (es,ws) = algebra.lowest_states(self.get_hamiltonian(),n=35, **kwargs)
           e0 = es[0]
           wf0 = ws[0]
           self.wf0 = wf0
           self.e0 = e0
           self.computed_gs = True
-          return self.wf0
+          return self.wf0, self.e0
+    def get_ep(self,**kwargs):
+        """Checks determinant of innerproduct matrix made from eigenvectors of hamiltonian"""
+        return algebra.EP_checker(self.get_hamiltonian(),**kwargs)
     def vev(self,op):
         """Return a vacuum expectation value"""
         wf0 = self.get_gs_array()
@@ -112,12 +117,14 @@ class EDchain():
 
 class State():
     """This is a dummy class to contain states"""
-    def __init__(self,v,MBO):
+    def __init__(self,v,MBO,e=None):
         if type(v)==State:
             self.v = v.v.copy()
+            self.e = e
             self.MBO = v.MBO
         else:
             self.v = v # store the vector
+            self.e = e
             self.MBO = MBO # store the many-body object
         self.mode = "ED" # exact diagonalization mode
     def __rmul__(self,a):
@@ -126,16 +133,16 @@ class State():
         if type(a)==multioperator.MultiOperator: # multioperator
             A = self.MBO.MO2matrix(a)  # get the matrix
             w = A@self.v # multiply
-            return type(self)(w,self.MBO) # create a new object
+            return State(w,self.MBO) # create a new object
         elif multioperator.isnumber(a):
             w = a*self.v # multiply
-            return type(self)(w,self.MBO) # create a new object
+            return State(w,self.MBO) # create a new object
         elif ismatrix(a):
             w = a@self.v
-            return type(self)(w,self.MBO) # create a new object
+            return State(w,self.MBO) # create a new object
         else: raise # not implemented
     def __add__(self,a):
-        if isinstance(a,State): return type(self)(self.v + a.v,self.MBO)
+        if type(a)==State: return State(self.v + a.v,self.MBO)
         else: raise
     def get_conjugate(self):
         out = self.copy()
@@ -143,7 +150,7 @@ class State():
         return out
     def __mul__(self,x):
         if multioperator.isnumber(x): 
-            return type(self)(x*self.v,self.MBO)
+            return State(x*self.v,self.MBO)
         else: raise
     def __truediv__(self,a):
         if multioperator.isnumber(a): # number
@@ -154,7 +161,7 @@ class State():
     def __neg__(self):
         return (-1)*self
     def overlap(self,a):
-        if isinstance(a,State): # state object
+        if type(a)==State: # state object
             return np.dot(np.conjugate(self.v),a.v)
         else: raise # not implemented
     def copy(self):
@@ -177,7 +184,7 @@ class State():
             A = a.SO  # get the matrix
         else: raise
         w = algebra.applyinverse(A,self.v)
-        return type(self)(w,self.MBO) # create a new object
+        return State(w,self.MBO) # create a new object
 
 
 

@@ -131,6 +131,12 @@ class Fermionic_Chain(Many_Body_Chain):
             from . import multioperator
             multioperator.use_jordan_wigner = False
         return Many_Body_Chain.execute(self,f)
+    def get_ep(self,**kwargs):
+        """
+        Checks determinant of innerproduct matrix made from eigenvectors of hamiltonian
+        """
+        MBF = self.get_ED_obj()
+        return algebra.EP_checker(MBF.h,**kwargs)
 
 
 

@@ -9,7 +9,7 @@ from .. import multioperator
 from .. import funtk
 from ..edtk import edchain
 
-nmax = 20 # maximum number of levels
+nmax = 24 # maximum number of levels
 
 def get_spinless_hamiltonian(m0,hubbard=None):
     """Compute ground state energy"""
@@ -180,7 +180,7 @@ class MBFermion(edchain.EDchain):
         test_commutation(self)
     def get_gs(self,**kwargs):
         out = super().get_gs(**kwargs)
-        return Fermionic_State(out,out.MBO)
+        return Fermionic_State(out,out.MBO,out.e)
     def get_operator(self,name,i=0):
         """
         Return a certain operator
@@ -252,10 +252,5 @@ class Fermionic_State(edchain.State):
         """Special fucntion to compute density matrix"""
         from ..dmtk.densitymatrix import dm_fermionic
         return dm_fermionic(self,**kwargs)
-    def get_correlation_entropy_density(self,**kwargs):
-        from .. import entanglement
-        return entanglement.get_correlation_entropy_density(self.MBO,
-                 wf=self,**kwargs)
-
 
 

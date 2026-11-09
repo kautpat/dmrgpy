@@ -1,4 +1,5 @@
 from scipy.sparse import issparse
+from scipy.sparse import save_npz
 from scipy.sparse import csc_matrix as csc
 import scipy.linalg as dlg
 import scipy.sparse.linalg as slg
@@ -7,7 +8,7 @@ import numpy as np
 
 det = dlg.det
 
-maxsize = 10000
+maxsize = 4000
 tol = 1e-7 # tolerancy
 maxiter = 1e6 # maximum number of iterations
 
@@ -146,10 +147,13 @@ def lowest_eigenvalues(h,n=10):
   return np.array(eig[0:n])
 
 
-def lowest_states(h,n=10,**kwargs):
+'''
+OLD VERSION I AM MAKING SOME CHANGES
+def lowest_states(h,n=10,psi_prev=None,**kwargs):
   """Get a ground state"""
   nmax = maxsize
-  info = False
+  info = True
+  print(h.shape)
   if h.shape[0]>nmax:
     if info: print("Calling ARPACK")
     if ishermitian(h): # Hermitian matrix
@@ -169,13 +173,66 @@ def lowest_states(h,n=10,**kwargs):
       eig,vs = dlg.eig(h.todense())
       eig,vs = sorteigen(eig,vs.T)
       return eig[0:n],vs[0:n]
+'''
+
+def lowest_states(h,n=10,psi_prev=None,e_prev=None,**kwargs):
+  """Get a ground state"""
+  nmax = maxsize
+  info = False
+  if h.shape[0]>nmax:
+    if info: print("Calling ARPACK")
+    if ishermitian(h): # Hermitian matrix
+      # print("\nhermit???????")
+      eig,eigvec = slg.eigsh(h,k=n,which="SA",maxiter=int(maxiter),tol=tol)
+      eig,eigvec = sorteigen(eig,eigvec.T)
+      print(eig[0:4])
+      print(eigvec[0] @ eigvec[1].conj())
+      return (eig,eigvec)
+    else: 
+      guess = None
+      if psi_prev is not None and hasattr(psi_prev, "v"):
+          guess = psi_prev.v
+      if guess is not None:
+          if e_prev is not None:
+            print("\nsigma shift inv used")
+            eig, eigvec = slg.eigs(h, k=7, v0=guess, sigma=e_prev, which='LM', maxiter=int(maxiter), tol=tol)
+          else:
+            print("\nregular eig solve used")
+            eig, eigvec = slg.eigs(h, k=n, v0=guess, which="SR", maxiter=int(maxiter), tol=tol)
+          eigvec = eigvec.T
+          overlaps = np.abs(eigvec @ guess.conj())
+          idx = np.argmax(overlaps)
+          order = overlaps.argsort()[::-1]
+          print(overlaps[order[0:4]])
+          print(eig[order[0:4]])
+          eig = eig[order]
+          eigvec = eigvec[order]
+          return (eig, eigvec)
+      else:
+          print("\nold section :(")
+          eig, eigvec = slg.eigs(h, k=n, which="SR", maxiter=int(maxiter), tol=tol)
+          eig, eigvec = sorteigen(eig, eigvec.T)
+          print(eig[0:4])
+          return (eig, eigvec)
+  else:
+    if info: print("Full diagonalization")
+    if ishermitian(h): # Hermitian matrix
+      eig,vs = dlg.eigh(h.todense())
+      return eig[0:n],vs.T[0:n] 
+    else: # non Hermitian matrix
+      eig,vs = dlg.eig(h.todense())
+      eig,vs = sorteigen(eig,vs.T)
+      print(eig[0:5])
+      print('\n')
+      return eig[0:n],vs[0:n]
 
 lowest_eigenvectors = lowest_states
 
 def sorteigen(eig,vs):
     """Return sorted eigenvalues and eigenvectors"""
+    print("Using old sort")
     w = eig - np.min(eig.real) # smallest real part
-    imweight = 1e-3 # how much to weight im when sorting 
+    imweight = 0 # how much to weight im when sorting 
     wz = w.real + imweight*w.imag
     vs = [y for (x,y) in sorted(zip(wz,vs),key=lambda x: x[0])]
     eig = [y.copy() for (x,y) in sorted(zip(wz,eig),key=lambda x: x[0])]
@@ -276,7 +333,25 @@ def applyinverse(A,b):
 
 
 
+def EP_checker(h,n=10):
+  """Return the determinant of the eigenvectors"""
+  if h.shape[0]>maxsize: # for sparse use arpack
+      eig,vs = lowest_states(h,n=n)
+      matr = make_matrix(np.array(vs))
+      return dlg.det(matr)
+  else:
+    if ishermitian(h): # Hermitian matrix
+      eig,vs = dlg.eigh(h.todense())
+      matr = make_matrix(vs.T)
+      return dlg.det(matr)
+    else: # non Hermitian matrix
+      eig,vs = dlg.eig(h.todense())
+      eig,vs = sorteigen(eig,vs.T)
+      matr = make_matrix(np.array(vs))
+      return dlg.det(matr)
 
-
-
-
+def make_matrix(v):
+  """Makes innerproduct matrix from the given vectors"""
+  m = v@(np.conjugate(v.T))
+  print(np.linalg.cond(m))
+  return m

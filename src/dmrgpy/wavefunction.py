@@ -1,7 +1,6 @@
 import numpy as np
 import os
 from copy import deepcopy
-import subprocess
 
 
 class Wavefunction():
@@ -19,7 +18,7 @@ class Wavefunction():
         elif self.mode=="DMRG":
             out = deepcopy(self) # copy object
             name = str(np.random())+".mps" # new name
-            subprocess.run(["cp",self.path+"/"+self.name,self.path+"/"+name])
+            os.system("cp "+self.path+"/"+self.name+" "+self.path+"/"+name)
             out.name = name # store the name
             return out # return new object
 

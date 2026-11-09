@@ -18,8 +18,7 @@ def get_dynamical_correlator(self,name=None,submode="KPM",
       A = self.get_operator(name[0])
       B = self.get_operator(name[1])
     else:
-        print("Unrecognized operator pair")
-        raise 
+      raise # this is no longer used
     h = self.get_operator(self.hamiltonian) # Hamiltonian in matrix form
     if wf0 is None:  wf0 = self.get_gs_array() # compute ground state
     else: 
@@ -66,44 +65,37 @@ def dynamical_correlator_kpm(h,e0,wf0,A,B,
 
 
 def dynamical_correlator_ED(h,a0,b0,delta=2e-2,
-        dex = 1e-5, 
         es=np.linspace(-1.0,10.0,600)):
     """Compute a dynamical correlator"""
-#    raise # this was buggy, but now it seems to work
+    raise # this is buggy
     emu,vs = algebra.eigh(h)
     U = np.array(vs) # matrix
     Uh = np.conjugate(np.transpose(U)) # Hermitian
-#    b0 = np.conjugate(b0.T) # dagger of the second operator
+    b0 = np.conjugate(b0.T)
     A = Uh@a0@U # get the matrix elements
     B = Uh@b0@U # get the matrix elements
     out = 0.0+es*0.0*1j # initialize
-    ex = emu-np.min(emu) # excitations
-    nex = len(ex[ex<dex]) # number of excited states
-    out = dynamical_sum(emu,es+1j*delta,A,B,out,nex=nex) # perform the summation
-    out -= dynamical_sum(emu,es-1j*delta,A,B,out,nex=nex) # perform the summation
+    out = dynamical_sum(emu,es+1j*delta,A,B,out) # perform the summation
+    out -= dynamical_sum(emu,es-1j*delta,A,B,out) # perform the summation
     return (es,-out.imag/(2*np.pi)) # return correlator
 
-from numba import jit
-
-@jit(nopython=True)
-def dynamical_sum(es,ws,A,B,out,nex=1):
+#@jit(nopython=True)
+def dynamical_sum(es,ws,A,B,out):
     """Return the sum giving the dynamical correlator"""
     out = out*0.0 # initialize
-    es = es-np.min(es) # remove minimum energy (ground state)
-    n = len(es) # number of eigenenergies
-    for i in range(nex): # loop over excited states
-      for iw in range(len(ws)): # loop over frequencies
-#        i = 0 # initial wavefunction (Ground state)
-        # this will not work properly if there are degeneracies
-        for j in range(n): # loop over eigenenergies
-            tmp = A[i,j]*B[j,i] # relevant matrix element
+    es = es-np.min(es) # remove minimum
+    n = len(es) # number of energies
+    for iw in range(len(ws)): # loop over frequencies
+        i = 0
+        for j in range(n): # loop over energies
+            tmp = A[i,j]*B[j,i]
             tmp *= 1./(ws[iw]+es[i] - es[j])
             out[iw] = out[iw] + tmp
-    return out/nex # return dynamical correlator
+    return out # return dynamical correlator
 
 
 def dynamical_correlator_inv(h0,wf0,e0,A,B,es=np.linspace(-1,10,600),
-        delta=3e-2,mode="cv",**kwargs):
+        delta=3e-2,mode="cv"):
   """Calculate a correlation function AB in a frequency window"""
   ## default method
 #  iden = np.identity(h0.shape[0],dtype=np.complex128) # identity
@@ -114,12 +106,12 @@ def dynamical_correlator_inv(h0,wf0,e0,A,B,es=np.linspace(-1,10,600),
       if mode=="full": # using exact inversion
           g1 = algebra.inv(iden*(e+e0+1j*delta)-h0)
           g2 = algebra.inv(iden*(e+e0-1j*delta)-h0)
-          g = 1j*(g1-g2)/2.
+          g = 1j*(g1-g2)/2./np.pi
           op = A@g@B # operator
           o = algebra.braket_wAw(wf0,op) # correlator
       elif mode=="cv": # correction vector algorithm
-          o1 = solve_cv(h0,wf0,A,B,e+e0,delta=delta,**kwargs) # conjugate gradient
-          o2 = solve_cv(h0,wf0,A,B,e+e0,delta=-delta,**kwargs) # conjugate gradient
+          o1 = solve_cv(h0,wf0,A,B,e+e0,delta=delta) # conjugate gradient
+          o2 = solve_cv(h0,wf0,A,B,e+e0,delta=-delta) # conjugate gradient
           o = 1j*(o1 - o2)/2. # substract
       else: raise # not recognised
       out.append(o)
@@ -127,14 +119,14 @@ def dynamical_correlator_inv(h0,wf0,e0,A,B,es=np.linspace(-1,10,600),
 
 
 
-def solve_cv(h0,wf0,si,sj,w,delta=0.0,rtol=1e-6):
+def solve_cv(h0,wf0,si,sj,w,delta=0.0):
     """Solve the dynamical correlator using conjugate gradient method"""
     ## This function may need some benchmarking
     from scipy.sparse import identity
     iden = identity(h0.shape[0],dtype=np.complex128) # matrix to use
     b = -delta*sj@wf0 # create the b vector
     A = (h0 - w*iden)@(h0-w*iden) + iden*delta*delta # define A matrix
-    x,info = slg.cg(A,b,rtol=rtol) # solve the equation
+    x,info = slg.cg(A,b,rtol=1e-10) # solve the equation
     x = 1j*x + (h0 - w*iden)@x/delta # full correction vector
     x = si@x # apply second operator
     o = np.dot(np.conjugate(wf0),x) # compute the braket
